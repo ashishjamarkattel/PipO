@@ -1,45 +1,55 @@
-import pandas as pd 
-import numpy as np 
+from src import config
+import pandas as pd
 import os
-import math
+from tqdm import tqdm
+tqdm.pandas()
+from sklearn.preprocessing import LabelEncoder
 
-def process_images(path,training=False,validation=False):
+def make_data(training=False, validation=False, testing=False):
 
-    """
-    Map the images with corresponding angles.
+    """create the dataframe for training or validation 
+    i.e connects images with respective labels
 
     Args:
-        path (string): location of the txt file which contain information.
+        training (bool, optional): Set true when data need is training. Defaults to False.
+        validation (bool, optional): Set true when data need is of validation. Defaults to False.
     """
-    images_angle = []
-    data = []
-
-    with open(path,"r") as f:
-        
-        lines = f.readlines()
-        for l in lines:
-            image, angle = l.split()
-            images_angle.append([image,float(angle)*(math.pi)/180])
-
-
-
+    print(" [INFO] CREATING THE DATAFRAME........ ")
+    lb = LabelEncoder()
+    data = pd.DataFrame()
+    images = []
+    labels = []
     if training:
+        dir_loc = config.TRAIN_DIR
+    elif validation:
+        dir_loc = config.VALID_DIR
+    elif testing:
+        dir_loc = config.TEST_DIR
+    else:
+        return 
+
+    try:
+        for lbl in tqdm(os.listdir(dir_loc)):
+            path = os.path.join(dir_loc, lbl)
+            for train_img in os.listdir(path):
+                image = os.path.join(path, train_img)
+                images.append(image)
+                labels.append(lbl)
+                
+        data["images"] = images
+        data["labels_class"] = labels
+        data["labels"] = lb.fit_transform(data["labels_class"])
+    except:
+        print("Something went wrong...")
+
+    print(" [INFO] DATAFRAME CREATED........ ")
+
+
+    return data.sample(frac=1)
     
-        data = images_angle[:int(len(images_angle)*0.4)]
-
-    if validation:
-        
-        data = images_angle[int(len(images_angle)*0.995):]
 
 
 
-    return np.array(data)
-            
 
-        
 
-# if __name__ == "__main__":
     
-#     img_path  = "driving_dataset/data.txt"
-#     data = process_images(img_path,training=True)
-#     print(data.shape)
