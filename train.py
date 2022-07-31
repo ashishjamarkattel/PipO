@@ -1,101 +1,50 @@
-import numpy as np 
-import cv2 as cv 
-import pandas as pd 
-from process_data import process_images
+from src import (
+    model, 
+    model_dispatcher,
+    dataLoader,
+    config,
+    process_data
+)
 import tensorflow as tf
-from model import model
-import keras
+from tqdm import tqdm
+tqdm.pandas()
 
-## defining the generators
+## get the dataframe
+train_dataframe = process_data.make_data(training=True)
+validation_dataframe = process_data.make_data(validation=True)
 
-class dataset:
+## get the dataloaders
+train_dataloader = dataLoader.dataset(train_dataframe, config.HEIGHT, config.WIDTH)
+validation_dataloader = dataLoader.dataset(validation_dataframe, config.HEIGHT, config.WIDTH)
 
-    def __init__(self,image_paths,height,width):
-
-        self.paths = image_paths
-        self.h  = height
-        self.w = width
-
-
-    def __getitem__(self,i):
-        
-        image,angle =  self.paths[i]
-        image = cv.imread("driving_dataset/"+image)
-        image = cv.resize(image,(self.h,self.w))
-        image = image/255 ## normalizing the image
-
-        return image,angle
-
-    def __len__(self):
-
-        return len(self.paths)
-
-
-
-
-## defining the dataloader
-
-class DataLoader(tf.keras.utils.Sequence):
-
-    def __init__(self, dataset, batch_size):
-        self.dataset = dataset
-        self.batch_size = batch_size
-
-    def __getitem__(self, i):
-        # collect batch data
-        start = i * self.batch_size
-        stop = (i + 1) * self.batch_size
-        image = []
-        angles = []
-        for j in range(start, stop):
-            image.append(self.dataset[j][0])
-            angles.append(float(self.dataset[j][1]))
-
-        return np.array(image,dtype="float32"),np.array(angles,dtype="float32")
-
-    def __len__(self):
-
-        return len(self.dataset)//self.batch_size
-
-        
-
-
-## hyperparameter
-
-batch_size = 64
-height = 224
-width = 224
-dim = 3
-epoch = 2
-
-img_path  = "driving_dataset/data.txt"
-train_paths = process_images(img_path,training=True)
-val_paths = process_images(img_path,validation=True)
-train_data = dataset(train_paths,height,width)
-val_data = dataset(val_paths,height,width)
-train_dataloader = DataLoader(train_data,batch_size) 
-val_dataloader = DataLoader(val_data,batch_size)
-
-# print("The shape of train data: ")
-# print(type(train_dataloader[0][1][0]))
-# print("The shape of validation data: ")
-# print(val_dataloader[0][0].shape,val_dataloader[0][1].shape)
+## get the batch dataloaders
+train_batch_data = dataLoader.DataLoader(train_dataloader, config.BATCH_SIZE)
+validation_batch_data = dataLoader.DataLoader(validation_dataloader, config.BATCH_SIZE)
 
 
 ## passing in the model
-size = (height,width,dim)
 tf.keras.backend.clear_session()
-model = model(size)
+size = (config.HEIGHT, config.WIDTH, 3)
+model = model.get_model(size)
 print(model.summary())
-
 ## callbacks 
 my_callbacks = [
    
-    tf.keras.callbacks.ModelCheckpoint(filepath='model.{epoch:02d}-{val_loss:.2f}.h5')
+    tf.keras.callbacks.ModelCheckpoint(
+        filepath='model/model.{epoch:02d}.h5',
+        save_best_only=True,
+        monitor="val_loss"
+        ),
+    
+    tf.keras.callbacks.EarlyStopping(patience=3,
+     min_delta=0.01, 
+     monitor="val_loss")
     
 ]
 
-# model = keras.models.load_model("model.04-1001.76.h5")
-# model.set_weights(weights)
-model.fit(train_dataloader,epochs=epoch,validation_data= val_dataloader,callbacks=my_callbacks)
-# print(model.summary())
+model.fit(
+    train_batch_data, 
+    epochs=config.EPOCHS, 
+    validation_data= validation_batch_data, 
+    callbacks=my_callbacks
+        )
